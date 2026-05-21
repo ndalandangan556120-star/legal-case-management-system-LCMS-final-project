@@ -17,9 +17,13 @@ zip \
 RUN a2enmod rewrite
 # Make Apache use port 10000 (Render default)
 RUN sed -i 's/Listen 80/Listen 10000/g' /etc/apache2/ports.conf \
-&& sed -i 's/<VirtualHost \*:80>/<VirtualHost *:10000>/g' /etc/apache2/sites-available/000-default.conf
+&& if [ -f /etc/apache2/sites-available/000-default.conf ]; then \
+    sed -i 's/<VirtualHost \*:80>/<VirtualHost *:10000>/g' /etc/apache2/sites-available/000-default.conf; \
+  fi
 # Set Laravel public as document root
-RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf \
+RUN if [ -f /etc/apache2/sites-available/000-default.conf ]; then \
+    sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf; \
+  fi \
 && sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/apache2.conf
 # Allow .htaccess for Laravel
 RUN printf '<Directory /var/www/html/public>\n\
