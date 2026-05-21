@@ -1,65 +1,69 @@
-FROM php:8.4-apache
-# Install system packages and PHP extensions
+# Multi-stage Dockerfile to produce smaller final image for Render
+FROM php:8.4-cli AS builder
+
+# Install system packages, PHP extensions and Node.js for building
 RUN apt-get update && apt-get install -y \
-git \
-unzip \
-curl \
-libpq-dev \
-libzip-dev \
-libonig-dev \
-libxml2-dev \
-libpng-dev \
-zip \
-&& docker-php-ext-install pdo pdo_mysql pdo_pgsql zip mbstring xml \
-&& apt-get clean \
-&& rm -rf /var/lib/apt/lists/*
-# Enable Apache rewrite
-RUN a2enmod rewrite
-# Make Apache use port 10000 (Render default)
-RUN sed -i 's/Listen 80/Listen 10000/g' /etc/apache2/ports.conf \
-&& if [ -f /etc/apache2/sites-available/000-default.conf ]; then \
-    sed -i 's/<VirtualHost \*:80>/<VirtualHost *:10000>/g' /etc/apache2/sites-available/000-default.conf; \
-  fi
-# Set Laravel public as document root
-RUN if [ -f /etc/apache2/sites-available/000-default.conf ]; then \
-    sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf; \
-  fi \
-&& sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/apache2.conf
-# Allow .htaccess for Laravel
-RUN printf '<Directory /var/www/html/public>\n\
-AllowOverride All\n\
-Require all granted\n\
-</Directory>\n' > /etc/apache2/conf-available/laravel.conf \
-&& a2enconf laravel
-# Install Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-&& apt-get install -y nodejs
+    git \
+    unzip \
+    curl \
+    libzip-dev \
+    libonig-dev \
+    libxml2-dev \
+    libpng-dev \
+    zip \
+    ca-certificates \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs build-essential \
+    && docker-php-ext-install pdo pdo_mysql zip mbstring xml \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Install Composer
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
 # Set working directory
 WORKDIR /var/www/html
-# Copy Laravel app
+
+# Copy only composer and npm files first to leverage layer cache
+COPY composer.json composer.lock ./
+COPY package.json package-lock.json ./
+
+# Install PHP and JS dependencies and build assets
+RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader || true
+RUN npm ci --silent || true && npm run build --silent || true
+
+# Copy application files
 COPY . .
-# Ensure Laravel directories exist before install
+
+# Ensure necessary directories exist and are writable
 RUN mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views public/uploads \
-  && chown -R www-data:www-data bootstrap/cache storage
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
-# Install frontend dependencies and build assets
-RUN npm install && npm run build
-RUN php artisan config:clear \
-&& php artisan route:clear \
-&& php artisan view:clear
-# Create storage symlink
-RUN php artisan storage:link || true
-# Fix permissions
-RUN mkdir -p storage/framework/cache storage/framework/sessions \
-storage/framework/views bootstrap/cache public/uploads \
-&& chown -R www-data:www-data storage bootstrap/cache public/uploads \
-&& chmod -R 775 storage bootstrap/cache public/uploads
-# (Optional) Run migrations
-RUN php artisan migrate --force || true
-# Expose port
+  && chown -R www-data:www-data bootstrap/cache storage public/uploads || true
+
+# Re-run composer install to ensure vendor is present (if not from cache)
+RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+
+# Final image
+FROM php:8.4-apache
+
+# Enable modules and small runtime tweaks
+RUN a2enmod rewrite || true
+RUN sed -i 's/Listen 80/Listen 10000/g' /etc/apache2/ports.conf || true
+RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/apache2.conf || true
+
+WORKDIR /var/www/html
+
+# Copy built app from builder
+COPY --from=builder /var/www/html /var/www/html
+
+# Install Composer binary (optional for runtime artisan tasks)
+COPY --from=builder /usr/local/bin/composer /usr/local/bin/composer
+
+# Ensure storage permissions
+RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views public/uploads bootstrap/cache \
+  && chown -R www-data:www-data storage bootstrap/cache public/uploads || true
+
+# Clear caches (best-effort during build)
+RUN php artisan config:clear || true && php artisan route:clear || true && php artisan view:clear || true
+
 EXPOSE 10000
-# Start Apache
 CMD ["apache2-foreground"]
