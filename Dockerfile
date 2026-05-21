@@ -1,6 +1,9 @@
 # Multi-stage Dockerfile to produce smaller final image for Render
 FROM php:8.4-cli AS builder
 
+# Disable BuildKit to avoid layer lock issues
+ENV DOCKER_BUILDKIT=0
+
 # Install system packages, PHP extensions and Node.js for building
 RUN apt-get update && apt-get install -y \
     git \

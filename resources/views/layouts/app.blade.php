@@ -296,7 +296,7 @@
 
                 {{-- Top Bar --}}
                 <header class="topbar">
-                    <span class="topbar-title">@yield('page-title')</span>
+                    <span class="topbar-title">@yield('page-title', $pageTitle ?? 'Dashboard')</span>
                 </header>
 
                 {{-- Main Content --}}
