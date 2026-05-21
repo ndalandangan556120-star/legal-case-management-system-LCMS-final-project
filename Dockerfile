@@ -15,11 +15,13 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs build-essential \
-    && docker-php-ext-install pdo pdo_mysql zip mbstring xml \
+    && docker-php-ext-install pdo_mysql zip mbstring xml \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_MEMORY_LIMIT=-1
 
 # Set working directory
 WORKDIR /var/www/html
@@ -32,17 +34,33 @@ COPY package.json package-lock.json ./
 COPY . .
 
 # Install JS deps and build assets (after copying app so Vite can find entry files)
-RUN npm ci --silent || true && npm run build --silent || true
+RUN npm ci --silent && npm run build --silent
 
 # Ensure necessary directories exist and are writable
 RUN mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views public/uploads \
   && chown -R www-data:www-data bootstrap/cache storage public/uploads || true
 
 # Install PHP dependencies (after copying app so artisan exists for package discovery)
-RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader --no-progress
 
 # Final image
 FROM php:8.4-apache
+
+# Install runtime dependencies and PHP extensions (ensure PDO MySQL available)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    default-mysql-client \
+    default-libmysqlclient-dev \
+    libzip-dev \
+    libonig-dev \
+    libxml2-dev \
+    libpng-dev \
+    zip \
+    ca-certificates \
+  && docker-php-ext-install pdo_mysql zip mbstring xml \
+  && docker-php-ext-enable pdo_mysql \
+  && php -r "echo 'PDO drivers: '.implode(',',PDO::getAvailableDrivers()).PHP_EOL;" \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Enable modules and small runtime tweaks
 RUN a2enmod rewrite || true

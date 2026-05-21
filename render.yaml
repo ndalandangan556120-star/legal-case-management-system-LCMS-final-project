@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: lcms-app
+    env: docker
+    branch: main
+    dockerfilePath: Dockerfile
+    startCommand: apache2-foreground
