@@ -40,6 +40,9 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 # Copy Laravel app
 COPY . .
+# Ensure Laravel directories exist before install
+RUN mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views public/uploads \
+  && chown -R www-data:www-data bootstrap/cache storage
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 # Install frontend dependencies and build assets
