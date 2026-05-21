@@ -28,18 +28,17 @@ WORKDIR /var/www/html
 COPY composer.json composer.lock ./
 COPY package.json package-lock.json ./
 
-# Install PHP and JS dependencies and build assets
-RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader || true
-RUN npm ci --silent || true && npm run build --silent || true
-
-# Copy application files
+# Copy full application so builds can access entry files (artisan, index.html, etc.)
 COPY . .
+
+# Install JS deps and build assets (after copying app so Vite can find entry files)
+RUN npm ci --silent || true && npm run build --silent || true
 
 # Ensure necessary directories exist and are writable
 RUN mkdir -p bootstrap/cache storage/framework/cache storage/framework/sessions storage/framework/views public/uploads \
   && chown -R www-data:www-data bootstrap/cache storage public/uploads || true
 
-# Re-run composer install to ensure vendor is present (if not from cache)
+# Install PHP dependencies (after copying app so artisan exists for package discovery)
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
 # Final image
@@ -64,6 +63,9 @@ RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framewor
 
 # Clear caches (best-effort during build)
 RUN php artisan config:clear || true && php artisan route:clear || true && php artisan view:clear || true
+
+# Ensure Apache serves public folder as the document root
+RUN printf '<VirtualHost *:10000>\n    ServerName localhost\n    DocumentRoot /var/www/html/public\n    <Directory /var/www/html/public>\n        Options Indexes FollowSymLinks\n        AllowOverride All\n        Require all granted\n    </Directory>\n</VirtualHost>\n' > /etc/apache2/sites-available/000-default.conf || true
 
 EXPOSE 10000
 CMD ["apache2-foreground"]
