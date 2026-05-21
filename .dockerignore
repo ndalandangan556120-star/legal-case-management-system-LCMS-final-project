@@ -1,3 +1,12 @@
-vendor 
-node_modules 
+vendor
+node_modules
 .git
+.env
+.env.*
+storage
+bootstrap/cache
+npm-debug.log
+npm-debug.*
+yarn-error.log
+.gitignore
+README.md
