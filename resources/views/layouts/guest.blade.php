@@ -5,14 +5,25 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
+        <title>{{ config('app.name', 'LCMS') }}</title>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @php
+            $manifestPath = public_path('build/manifest.json');
+            $manifest = file_exists($manifestPath) ? json_decode(file_get_contents($manifestPath), true) : null;
+            $cssAsset = $manifest['resources/css/app.css']['file'] ?? null;
+            $jsAsset = $manifest['resources/js/app.js']['file'] ?? null;
+        @endphp
+        @if($manifest && $cssAsset && $jsAsset)
+            <link rel="stylesheet" href="{{ asset('build/' . $cssAsset) }}">
+            <script type="module" src="{{ asset('build/' . $jsAsset) }}"></script>
+        @else
+            @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @endif
         
         <style>
             body {

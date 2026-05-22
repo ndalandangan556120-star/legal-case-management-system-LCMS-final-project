@@ -12,7 +12,18 @@
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @php
+            $manifestPath = public_path('build/manifest.json');
+            $manifest = file_exists($manifestPath) ? json_decode(file_get_contents($manifestPath), true) : null;
+            $cssAsset = $manifest['resources/css/app.css']['file'] ?? null;
+            $jsAsset = $manifest['resources/js/app.js']['file'] ?? null;
+        @endphp
+        @if($manifest && $cssAsset && $jsAsset)
+            <link rel="stylesheet" href="{{ asset('build/' . $cssAsset) }}">
+            <script type="module" src="{{ asset('build/' . $jsAsset) }}"></script>
+        @else
+            @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @endif
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
         <style>
